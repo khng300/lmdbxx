@@ -33,6 +33,7 @@
 #include <stdexcept>   /* for std::runtime_error */
 #include <string>      /* for std::string */
 #include <type_traits> /* for std::is_pod<> */
+#include <errno.h>     /* for errno */
 
 namespace lmdb {
   using mode = mdb_mode_t;
@@ -810,7 +811,7 @@ namespace lmdb {
   static inline MDB_txn* cursor_txn(MDB_cursor* cursor) noexcept;
   static inline MDB_dbi cursor_dbi(MDB_cursor* cursor) noexcept;
   static inline bool cursor_get(MDB_cursor* cursor, MDB_val* key, MDB_val* data, MDB_cursor_op op);
-  static inline void cursor_put(MDB_cursor* cursor, MDB_val* key, MDB_val* data, unsigned int flags);
+  static inline bool cursor_put(MDB_cursor* cursor, MDB_val* key, MDB_val* data, unsigned int flags);
   static inline void cursor_del(MDB_cursor* cursor, unsigned int flags);
   static inline void cursor_count(MDB_cursor* cursor, std::size_t& count);
 }
@@ -886,15 +887,16 @@ lmdb::cursor_get(MDB_cursor* const cursor,
  * @throws lmdb::error on failure
  * @see http://symas.com/mdb/doc/group__mdb.html#ga1f83ccb40011837ff37cc32be01ad91e
  */
-static inline void
+static inline bool
 lmdb::cursor_put(MDB_cursor* const cursor,
                  MDB_val* const key,
                  MDB_val* const data,
                  const unsigned int flags = 0) {
   const int rc = ::mdb_cursor_put(cursor, key, data, flags);
-  if (rc != MDB_SUCCESS) {
+  if (rc != MDB_SUCCESS && rc != MDB_KEYEXIST) {
     error::raise("mdb_cursor_put", rc);
   }
+  return (rc == MDB_SUCCESS);
 }
 
 /**
@@ -1905,6 +1907,101 @@ public:
             const MDB_cursor_op op = MDB_SET) {
     lmdb::val k{&key, sizeof(K)};
     return get(k, nullptr, op);
+  }
+
+  /**
+   * Stores a key/value pair into the database.
+   *
+   * @param key
+   * @param data
+   * @param flags
+   * @throws lmdb::error on failure
+   * @retval true  if the key/value pair was inserted
+   * @retval false if the key already existed, and MDB_NOOVERWRITE is set on
+   *               flags
+   */
+  bool put(MDB_val* const key,
+           MDB_val* const data,
+           const unsigned int flags = 0) {
+    return lmdb::cursor_put(handle(), key, data, flags);
+  }
+
+  /**
+   * Stores a key/value pair into the database.
+   *
+   * @param key
+   * @param flags except MDB_MULTIPLE
+   * @throws lmdb::error on failure
+   * @retval true  if the key/value pair was inserted
+   * @retval false if the key already existed, and MDB_NOOVERWRITE is set on
+   *               flags
+   */
+  bool put(lmdb::val& key,
+           const unsigned int flags = 0) {
+    if (flags & MDB_MULTIPLE) {
+      error::raise("lmdb::cursor::put", EINVAL);
+    }
+
+    lmdb::val data{};
+    return lmdb::cursor_put(handle(), key, data, flags);
+  }
+
+  /**
+   * Stores a key/value pair into the database.
+   *
+   * @param key
+   * @param data
+   * @param flags except MDB_MULTIPLE
+   * @throws lmdb::error on failure
+   * @retval true  if the key/value pair was inserted
+   * @retval false if the key already existed, and MDB_NOOVERWRITE is set on
+   *               flags
+   */
+  bool put(lmdb::val& key,
+           lmdb::val& data,
+           const unsigned int flags = 0) {
+    if (flags & MDB_MULTIPLE) {
+      error::raise("lmdb::cursor::put", EINVAL);
+    }
+
+    return lmdb::cursor_put(handle(), key, data, flags);
+  }
+
+  /**
+   * Stores a key/value pair into the database.
+   *
+   * @param key
+   * @param val
+   * @param flags except MDB_MULTIPLE
+   * @throws lmdb::error on failure
+   * @retval true  if the key/value pair was inserted
+   * @retval false if the key already existed, and MDB_NOOVERWRITE is set on
+   *               flags
+   */
+  bool put(std::string& key,
+           std::string& val,
+           const unsigned int flags = 0) {
+    if (flags & MDB_MULTIPLE) {
+      error::raise("lmdb::cursor::put", EINVAL);
+    }
+
+    lmdb::val k{key}, v{val};
+    bool s = put(k, v, flags);
+    if (!s) {
+      key.assign(k.data(), k.size());
+      val.assign(v.data(), v.size());
+    }
+    return s;
+  }
+
+  /**
+   * Removes a key/value pair from this database.
+   *
+   * @param flags
+   * @throws lmdb::error on failure
+   */
+  void del(const unsigned int flags = 0) {
+    lmdb::cursor_del(handle(), flags);
   }
 };
 
