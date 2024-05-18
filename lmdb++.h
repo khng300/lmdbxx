@@ -250,6 +250,7 @@ namespace lmdb {
   static inline void env_set_max_readers(MDB_env* env, unsigned int count);
   static inline void env_get_max_readers(MDB_env* env, unsigned int* count);
   static inline void env_set_max_dbs(MDB_env* env, MDB_dbi count);
+  static inline void env_set_pagesize(MDB_env* env, size_t size);
   static inline unsigned int env_get_max_keysize(MDB_env* env);
 #if MDB_VERSION_FULL >= MDB_VERINT(0, 9, 11)
   static inline void env_set_userctx(MDB_env* env, void* ctx);
@@ -476,6 +477,19 @@ lmdb::env_set_max_dbs(MDB_env* const env,
   const int rc = ::mdb_env_set_maxdbs(env, count);
   if (rc != MDB_SUCCESS) {
     error::raise("mdb_env_set_maxdbs", rc);
+  }
+}
+
+/**
+ * @throws lmdb::error on failure
+ * @see http://symas.com/mdb/doc/group__mdb.html#gaa2fc2f1f37cb1115e733b62cab2fcdbc
+ */
+static inline void
+lmdb::env_set_pagesize(MDB_env* const env,
+                      size_t size) {
+  const int rc = ::mdb_env_set_pagesize(env, size);
+  if (rc != MDB_SUCCESS) {
+    error::raise("mdb_env_set_size", rc);
   }
 }
 
@@ -1103,6 +1117,15 @@ public:
    */
   env& set_max_dbs(const MDB_dbi count) {
     lmdb::env_set_max_dbs(handle(), count);
+    return *this;
+  }
+
+  /**
+   * @param count
+   * @throws lmdb::error on failure
+   */
+  env& set_pagesize(const MDB_dbi count) {
+    lmdb::env_set_pagesize(handle(), count);
     return *this;
   }
 
