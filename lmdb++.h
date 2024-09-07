@@ -828,6 +828,7 @@ lmdb::dbi_del(MDB_txn* const txn,
 
 namespace lmdb {
   static inline void cursor_open(MDB_txn* txn, MDB_dbi dbi, MDB_cursor** cursor);
+  static inline MDB_cursor *cursor_duplicate(MDB_cursor* cursor);
   static inline void cursor_close(MDB_cursor* cursor) noexcept;
   static inline void cursor_renew(MDB_txn* txn, MDB_cursor* cursor);
   static inline MDB_txn* cursor_txn(MDB_cursor* cursor) noexcept;
@@ -850,6 +851,20 @@ lmdb::cursor_open(MDB_txn* const txn,
   if (rc != MDB_SUCCESS) {
     error::raise("mdb_cursor_open", rc);
   }
+}
+
+/**
+ * @throws lmdb::error on failure
+ * @see http://symas.com/mdb/doc/group__mdb.html#ga9ff5d7bd42557fd5ee235dc1d62613aa
+ */
+static inline MDB_cursor *
+lmdb::cursor_duplicate(MDB_cursor* cursor) {
+  MDB_cursor *result;
+  int rc = ::mdb_cursor_duplicate(cursor, &result);
+  if (rc != MDB_SUCCESS) {
+    error::raise("mdb_cursor_duplicate", rc);
+  }
+  return result;
 }
 
 /**
@@ -1555,11 +1570,33 @@ public:
   }
 
   /**
+   * Copy constructor.
+   */
+  cursor(const cursor& other) noexcept {
+    if (other._handle != nullptr) {
+      _handle = cursor_duplicate(other._handle);
+    }
+  }
+
+  /**
    * Move assignment operator.
    */
   cursor& operator=(cursor&& other) noexcept {
     if (this != &other) {
       std::swap(_handle, other._handle);
+    }
+    return *this;
+  }
+
+  /**
+   * Copy assignment operator.
+   */
+  cursor& operator=(const cursor& other) noexcept {
+    if (this != &other) {
+      close();
+      if (other._handle != nullptr) {
+        _handle = cursor_duplicate(other._handle);
+      }
     }
     return *this;
   }
