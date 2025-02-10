@@ -240,6 +240,7 @@ namespace lmdb {
 #endif
   static inline void env_stat(MDB_env* env, MDB_stat* stat);
   static inline void env_info(MDB_env* env, MDB_envinfo* stat);
+  static inline void env_info2(MDB_env* env, MDB_envinfo2* stat);
   static inline void env_sync(MDB_env* env, bool force);
   static inline void env_close(MDB_env* env) noexcept;
   static inline void env_set_flags(MDB_env* env, unsigned int flags, bool onoff);
@@ -351,6 +352,19 @@ lmdb::env_info(MDB_env* const env,
   const int rc = ::mdb_env_info(env, stat);
   if (rc != MDB_SUCCESS) {
     error::raise("mdb_env_info", rc);
+  }
+}
+
+/**
+ * @throws lmdb::error on failure
+ * @see http://symas.com/mdb/doc/group__mdb.html#ga18769362c7e7d6cf91889a028a5c5947
+ */
+static inline void
+lmdb::env_info2(MDB_env* const env,
+                MDB_envinfo2* const stat) {
+  const int rc = ::mdb_env_info2(env, stat);
+  if (rc != MDB_SUCCESS) {
+    error::raise("mdb_env_info2", rc);
   }
 }
 
@@ -1142,6 +1156,16 @@ public:
   env& set_pagesize(const MDB_dbi count) {
     lmdb::env_set_pagesize(handle(), count);
     return *this;
+  }
+
+  /**
+   * @return MDB_envinfo2
+   * @throws lmdb::error on failure
+   */
+  MDB_envinfo2 info2() {
+    MDB_envinfo2 arg;
+    lmdb::env_info2(_handle, &arg);
+    return arg;
   }
 
   /**
